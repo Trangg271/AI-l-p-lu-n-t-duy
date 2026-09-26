@@ -1,0 +1,4 @@
+# frontend/components/ui/.gitkeep
+# shadcn/ui components are added here via: npx shadcn@latest add <component>
+# Example:
+#   npx shadcn@latest add button dialog scroll-area select toast tooltip
