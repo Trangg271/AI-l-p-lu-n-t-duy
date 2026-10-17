@@ -226,7 +226,8 @@ export function ScoreModal({
     },
     {
       key: "rebuttal_effectiveness",
-      label: language === "en" ? "Rebuttal Effectiveness" : "Hiệu quả phản biện",
+      label:
+        language === "en" ? "Rebuttal Effectiveness" : "Hiệu quả phản biện",
       value: score.rebuttal_effectiveness,
     },
   ];
@@ -274,7 +275,9 @@ export function ScoreModal({
                       id="score-title"
                       className="text-lg font-heading font-bold text-foreground"
                     >
-                      {language === "en" ? "Debate Results" : "Kết Quả Tranh Luận"}
+                      {language === "en"
+                        ? "Debate Results"
+                        : "Kết Quả Tranh Luận"}
                     </h2>
                     <p className="text-xs text-muted-foreground">
                       {language === "en"
@@ -291,7 +294,11 @@ export function ScoreModal({
                       setLanguage((l) => (l === "en" ? "vi" : "en"))
                     }
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-socratic-surface-2 border border-socratic-border hover:border-brand-500/40 transition-colors"
-                    title={language === "en" ? "Chuyển sang tiếng Việt" : "Switch to English"}
+                    title={
+                      language === "en"
+                        ? "Chuyển sang tiếng Việt"
+                        : "Switch to English"
+                    }
                   >
                     <Globe className="h-3.5 w-3.5" />
                     {language === "en" ? "EN" : "VI"}
@@ -440,6 +447,12 @@ export function ScoreModal({
                   </p>
                 </motion.div>
               )}
+
+              <p className="mx-6 mb-4 text-xs leading-relaxed text-muted-foreground">
+                {language === "en"
+                  ? "This is an AI-generated practice assessment, not a verified grade. Review the feedback critically and ask a teacher to compare it when needed."
+                  : "Đây là đánh giá luyện tập do AI tạo, chưa được giáo viên xác minh. Hãy xem phản hồi một cách chủ động và nhờ thầy cô đối chiếu khi cần."}
+              </p>
 
               {/* Close button */}
               <div className="px-6 pb-6">

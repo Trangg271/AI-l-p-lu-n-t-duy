@@ -7,6 +7,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 os.environ["GOOGLE_API_KEY"] = "test-key-placeholder"
+os.environ["AI_PROVIDER"] = "gemini"
 os.environ["ENVIRONMENT"] = "development"
 
 from app.config import get_settings  # noqa: E402

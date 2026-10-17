@@ -10,11 +10,12 @@
 | Feature | Tech |
 |---|---|
 | Real-time streaming debate | WebSocket + LangGraph streaming |
-| Logical fallacy detection | Gemini 2.5 Pro |
+| Logical fallacy detection | Configured complex AI model |
 | Long-session claim memory | Qdrant vector search |
-| Post-session rubric grading | Gemini 2.5 Pro |
+| Post-session rubric grading | Configured complex AI model |
 | Bilingual (EN + VI) | `paraphrase-multilingual-mpnet-base-v2` |
 | Session state & checkpointing | Redis + LangGraph checkpointer |
+| Practice history & weekly score trend | Browser-local session index + Redis (90-day retention) |
 
 ---
 
@@ -22,7 +23,7 @@
 
 ```
 frontend/   Next.js 15 (App Router) · TypeScript · Tailwind CSS · Framer Motion · shadcn/ui
-backend/    Python 3.12 · FastAPI · LangGraph · google-generativeai · uv
+backend/    Python 3.12 · FastAPI · LangGraph · OpenAI / Gemini APIs · uv
 infra/      Qdrant (Docker) · Redis (Docker) · docker-compose
 ```
 
@@ -43,7 +44,8 @@ git clone <repo-url>
 cd socratic-ai
 
 cp .env.example .env
-# Edit .env and set GOOGLE_API_KEY=<your-google-ai-studio-key>
+# Edit .env and set OPENAI_API_KEY=<your-openai-api-key>
+# Keep the key in .env; never put it in a Dockerfile or commit it.
 ```
 
 ### 3. Start infrastructure (Qdrant + Redis)
@@ -106,7 +108,7 @@ socratic-ai/
 │   ├── app/
 │   │   ├── __init__.py
 │   │   ├── main.py                  # FastAPI app factory + lifespan
-│   │   ├── config.py                # pydantic-settings + Gemini factory
+│   │   ├── config.py                # pydantic-settings + AI provider selection
 │   │   ├── models/
 │   │   │   ├── session.py           # Session domain models
 │   │   │   └── debate.py            # Turn, fallacy, WS message models
@@ -145,12 +147,18 @@ socratic-ai/
 
 ## API Reference
 
+The `/history` page shows sessions recorded in the current browser and their weekly
+rubric-score trend. Session IDs stay in browser storage; full session data remains in
+Redis for 90 days by default (`REDIS_SESSION_TTL_SECONDS` can override this value).
+There is no account-based cross-device history.
+
 ### REST
 
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/session/create` | Create a new debate session |
 | `GET` | `/session/{id}` | Get session metadata |
+| `POST` | `/session/history` | Load compact summaries for browser-recorded session IDs |
 | `POST` | `/session/{id}/end` | End session + trigger grading |
 | `GET` | `/health` | Liveness probe |
 
@@ -176,14 +184,18 @@ socratic-ai/
 
 ---
 
-## Gemini Model Usage
+## AI Provider & Model Usage
 
-| Task | Model | Rationale |
+| Task | OpenAI default | Gemini override |
 |---|---|---|
-| Debate responses, memory extraction | `gemini-2.5-flash` | High-frequency, low-latency |
-| Fallacy detection, session grading | `gemini-2.5-pro` | Complex reasoning |
+| Debate responses, memory extraction | `OPENAI_FAST_MODEL` (`gpt-4.1-mini`) | `GEMINI_FAST_MODEL` |
+| Fallacy detection, session grading | `OPENAI_COMPLEX_MODEL` (`gpt-4.1`) | `GEMINI_COMPLEX_MODEL` |
 
-Configure via `get_settings().get_gemini_model("fast" | "complex")`.
+Configure with `AI_PROVIDER=openai` and `OPENAI_API_KEY`. Set
+`AI_PROVIDER=gemini` and `GOOGLE_API_KEY` to use Gemini instead. API keys are read
+only by the backend from environment variables / `.env`; never add them to the
+Dockerfile, frontend environment, or source control. Docker Compose passes `.env`
+only to the backend service.
 
 ---
 
@@ -236,7 +248,11 @@ See [`.env.example`](.env.example) for the full list. Required:
 
 | Variable | Description |
 |---|---|
-| `GOOGLE_API_KEY` | Google AI Studio API key |
+| `AI_PROVIDER` | `openai` or `gemini` (auto-selects OpenAI when its key is available if omitted) |
+| `OPENAI_API_KEY` | OpenAI API key; keep it server-side in `.env` or a secrets manager |
+| `OPENAI_FAST_MODEL` | OpenAI model for debate responses and claim extraction |
+| `OPENAI_COMPLEX_MODEL` | OpenAI model for fallacy detection and grading |
+| `GOOGLE_API_KEY` | Optional Google AI Studio key when using `AI_PROVIDER=gemini` |
 | `QDRANT_URL` | Qdrant REST endpoint (default: `http://localhost:6333`) |
 | `REDIS_URL` | Redis URL (default: `redis://localhost:6379`) |
 | `NEXT_PUBLIC_API_URL` | Backend URL visible to the browser |

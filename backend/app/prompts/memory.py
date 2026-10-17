@@ -2,7 +2,7 @@
 """
 Prompt builders for the memory extraction pipeline.
 
-Used by: ``graph/nodes.py`` → ``memory_node`` (gemini-2.5-flash)
+Used by: ``graph/nodes.py`` → ``memory_node`` (configured fast model)
 
 Extracts atomic factual and normative claims from the latest AI
 response (and optionally the user's turn) for storage in Qdrant.

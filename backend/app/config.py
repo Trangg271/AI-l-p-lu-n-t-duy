@@ -9,7 +9,7 @@ Usage:
     from app.config import get_settings
 
     settings = get_settings()
-    model = settings.get_gemini_model("fast")
+    client, model = settings.get_ai_client("fast")
 """
 
 from __future__ import annotations
@@ -23,13 +23,9 @@ from google import genai
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-logger = structlog.get_logger(__name__)
+from app.utils.llm import ChatClient, GeminiChatClient, OpenAIChatClient
 
-# Model defaults can be overridden using GEMINI_FAST_MODEL / GEMINI_COMPLEX_MODEL.
-_MODEL_MAP: dict[str, str] = {
-    "fast": "gemini-3.5-flash-lite",
-    "complex": "gemini-3.1-flash-lite",
-}
+logger = structlog.get_logger(__name__)
 
 
 class Settings(BaseSettings):
@@ -42,11 +38,21 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── Google AI Studio ───────────────────────────────────────────────────────
-    google_api_key: SecretStr = Field(..., description="Google AI Studio API key")
-
-    gemini_fast_model: str = _MODEL_MAP["fast"]
-    gemini_complex_model: str = _MODEL_MAP["complex"]
+    # ── AI providers ─────────────────────────────────────────────────────────
+    ai_provider: Literal["openai", "gemini"] | None = Field(
+        default=None,
+        description="AI provider; when unset, use OpenAI if configured, otherwise Gemini.",
+    )
+    openai_api_key: SecretStr | None = Field(
+        default=None, description="OpenAI API key; supply through the environment."
+    )
+    openai_fast_model: str = "gpt-4.1-mini"
+    openai_complex_model: str = "gpt-4.1"
+    google_api_key: SecretStr | None = Field(
+        default=None, description="Optional Google AI Studio API key for Gemini."
+    )
+    gemini_fast_model: str = "gemini-3.5-flash-lite"
+    gemini_complex_model: str = "gemini-3.1-flash-lite"
 
     # ── Qdrant ────────────────────────────────────────────────────────────────
     qdrant_url: str = Field(
@@ -72,8 +78,8 @@ class Settings(BaseSettings):
         description="Redis connection URL",
     )
     redis_session_ttl_seconds: int = Field(
-        default=3600,
-        description="TTL for session keys in Redis (seconds)",
+        default=90 * 24 * 60 * 60,
+        description="TTL for session keys in Redis (seconds); defaults to 90 days for practice history",
     )
 
     # ── CORS / Frontend ────────────────────────────────────────────────────────
@@ -104,11 +110,58 @@ class Settings(BaseSettings):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
 
-    # ── Gemini model factory ──────────────────────────────────────────────────
+    @property
+    def selected_ai_provider(self) -> Literal["openai", "gemini"]:
+        if self.ai_provider is not None:
+            provider = self.ai_provider
+        elif self.openai_api_key and self.openai_api_key.get_secret_value().strip():
+            provider = "openai"
+        else:
+            provider = "gemini"
+
+        key = self.openai_api_key if provider == "openai" else self.google_api_key
+        if key is None or not key.get_secret_value().strip():
+            variable = "OPENAI_API_KEY" if provider == "openai" else "GOOGLE_API_KEY"
+            raise ValueError(f"AI_PROVIDER={provider} requires {variable} to be configured.")
+        return provider
+
+    def get_ai_client(self, task: Literal["fast", "complex"]) -> tuple[ChatClient, str]:
+        provider = self.selected_ai_provider
+        client: ChatClient
+        if provider == "openai":
+            model_name = self.openai_fast_model if task == "fast" else self.openai_complex_model
+            client = OpenAIChatClient(
+                api_key=self._required_api_key(self.openai_api_key, "OPENAI_API_KEY"),
+                model=model_name,
+            )
+        else:
+            model_name = self.gemini_fast_model if task == "fast" else self.gemini_complex_model
+            client = GeminiChatClient(
+                genai.Client(
+                    api_key=self._required_api_key(self.google_api_key, "GOOGLE_API_KEY"),
+                    http_options={"timeout": 60_000},
+                ),
+                model=model_name,
+            )
+
+        logger.info(
+            "ai_model_selected",
+            provider=provider,
+            task=task,
+            model=model_name,
+            environment=self.environment,
+        )
+        return client, model_name
+
+    @staticmethod
+    def _required_api_key(key: SecretStr | None, variable: str) -> str:
+        if key is None or not key.get_secret_value().strip():
+            raise ValueError(f"{variable} is required for the selected AI provider.")
+        return key.get_secret_value()
 
     def get_gemini_model(self, task: Literal["fast", "complex"]) -> tuple["genai.Client", str]:
         """
-        Return a ``(client, model_name)`` tuple for the given task tier.
+        Return a native Gemini client for integrations that need Gemini-specific APIs.
 
         Callers should use::
 
@@ -117,18 +170,12 @@ class Settings(BaseSettings):
                 model=model_name, contents=[...]
             )
         """
+        if self.google_api_key is None or not self.google_api_key.get_secret_value().strip():
+            raise ValueError("GOOGLE_API_KEY is required for direct Gemini access.")
         model_name = self.gemini_fast_model if task == "fast" else self.gemini_complex_model
-
         client = genai.Client(
             api_key=self.google_api_key.get_secret_value(),
             http_options={"timeout": 60_000},
-        )
-
-        logger.info(
-            "gemini_model_selected",
-            task=task,
-            model=model_name,
-            environment=self.environment,
         )
 
         return client, model_name
@@ -150,9 +197,11 @@ def get_settings() -> Settings:
         get_settings.cache_clear()
     """
     settings = Settings()
+    ai_provider = settings.selected_ai_provider
     logger.info(
         "settings_loaded",
         environment=settings.environment,
+        ai_provider=ai_provider,
         qdrant_url=settings.qdrant_url,
         redis_url=settings.redis_url,
     )

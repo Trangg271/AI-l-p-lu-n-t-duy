@@ -4,7 +4,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createSession } from "@/lib/api";
+import { rememberSession } from "@/lib/session-history";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Brain,
@@ -18,6 +20,9 @@ import {
   Shield,
   BarChart3,
   ChevronDown,
+  Smartphone,
+  BookOpen,
+  Users,
 } from "lucide-react";
 
 // ─── Topic data ──────────────────────────────────────────────────────────────
@@ -36,6 +41,36 @@ interface TopicConfig {
 }
 
 const TOPICS: TopicConfig[] = [
+  {
+    id: "phones-at-school",
+    nameEn: "Phones at School",
+    nameVi: "Có nên dùng điện thoại ở trường?",
+    icon: <Smartphone className="h-6 w-6" />,
+    difficulty: "beginner",
+    description:
+      "Điện thoại giúp học tập và liên lạc, nhưng cũng có thể làm học sinh mất tập trung. Trường học nên cho phép sử dụng không?",
+    color: "from-sky-500/20 to-blue-500/10",
+  },
+  {
+    id: "homework",
+    nameEn: "Homework",
+    nameVi: "Học sinh có nên được giao bài tập về nhà?",
+    icon: <BookOpen className="h-6 w-6" />,
+    difficulty: "beginner",
+    description:
+      "Bài tập ở nhà giúp ôn luyện, nhưng học sinh cũng cần thời gian nghỉ ngơi. Mỗi ngày có nên giao bài tập không?",
+    color: "from-orange-500/20 to-amber-500/10",
+  },
+  {
+    id: "social-media-teens",
+    nameEn: "Social Media for Teens",
+    nameVi: "Mạng xã hội có lợi cho học sinh THCS?",
+    icon: <Users className="h-6 w-6" />,
+    difficulty: "beginner",
+    description:
+      "Mạng xã hội giúp kết nối bạn bè nhưng có thể ảnh hưởng đến thời gian và sự riêng tư. Học sinh THCS có nên dùng?",
+    color: "from-pink-500/20 to-rose-500/10",
+  },
   {
     id: "ai-ethics",
     nameEn: "AI Ethics",
@@ -304,7 +339,19 @@ export default function HomePage() {
           user_position: stance,
           difficulty: topic.difficulty,
         });
-        router.push(`/debate/${session.session_id}`);
+        let historyWarning = false;
+        try {
+          rememberSession(session.session_id);
+        } catch (historyError) {
+          console.error(
+            "Could not save session to browser history",
+            historyError,
+          );
+          historyWarning = true;
+        }
+        router.push(
+          `/debate/${session.session_id}${historyWarning ? "?history=unavailable" : ""}`,
+        );
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Không thể tạo phiên tranh luận",
@@ -322,6 +369,12 @@ export default function HomePage() {
             SocraticAI
           </span>
           <div className="flex items-center gap-3">
+            <Link
+              href="/history"
+              className="rounded-full border border-socratic-border/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Lịch sử luyện tập
+            </Link>
             <span className="text-[11px] text-muted-foreground px-2.5 py-1 rounded-full border border-socratic-border/50 bg-socratic-surface/50">
               Bản thử nghiệm
             </span>
@@ -389,9 +442,10 @@ export default function HomePage() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed"
           >
-            Đối đầu trực tiếp với AI tranh biện ứng dụng phương pháp Socratic, nhận diện
-            ngụy biện logic theo thời gian thực và nhận đánh giá chi tiết theo bảng điểm rubric chuẩn mực
-            — hoàn toàn bằng <strong className="text-foreground">Tiếng Việt</strong>.
+            Đối đầu trực tiếp với AI tranh biện ứng dụng phương pháp Socratic,
+            nhận diện ngụy biện logic theo thời gian thực và nhận đánh giá chi
+            tiết theo bảng điểm rubric chuẩn mực — hoàn toàn bằng{" "}
+            <strong className="text-foreground">Tiếng Việt</strong>.
           </motion.p>
 
           {/* Mini feature pills */}
@@ -428,7 +482,8 @@ export default function HomePage() {
               <span className="gradient-text-accent">Tranh Biện</span>
             </h2>
             <p className="text-sm text-muted-foreground">
-              Chọn một chủ đề, xác định lập trường của bạn và bắt đầu tranh luận.
+              Chọn một chủ đề, xác định lập trường của bạn và bắt đầu tranh
+              luận.
             </p>
           </motion.div>
 
@@ -465,8 +520,8 @@ export default function HomePage() {
       {/* ── Footer ────────────────────────────────────────────────────────── */}
       <footer className="relative z-10 border-t border-socratic-border/30 py-8 px-4 text-center">
         <p className="text-xs text-muted-foreground">
-          SocraticAI · Được xây dựng với Next.js 15, FastAPI, LangGraph &amp; Gemini ·
-          Tranh luận văn minh
+          SocraticAI · Được xây dựng với Next.js 15, FastAPI, LangGraph &amp;
+          Gemini · Tranh luận văn minh
         </p>
       </footer>
     </main>

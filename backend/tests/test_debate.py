@@ -52,6 +52,22 @@ async def test_stance_and_snapshot_persist(test_client, field):
     assert (await test_client.get(f"/session/{data['session_id']}")).json() == data
 
 
+async def test_session_history_returns_compact_entries_and_missing_ids(test_client):
+    session = await new_session()
+    missing_id = UUID("00000000-0000-0000-0000-000000000001")
+    response = await test_client.post(
+        "/session/history",
+        json={"session_ids": [str(session.session_id), str(missing_id)]},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sessions"][0]["session_id"] == str(session.session_id)
+    assert data["sessions"][0]["topic"] == session.config.topic
+    assert "turns" not in data["sessions"][0]
+    assert data["missing_session_ids"] == [str(missing_id)]
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -269,30 +285,20 @@ async def test_max_turns_grades_and_reconnect_restores_score(memory_repo, monkey
 
 
 async def test_real_graph_receives_stream_config(monkeypatch):
-    async def stream(**kwargs):
-        assert "system_instruction" in kwargs["config"]
+    async def stream(prompt, *, system_instruction=None):
+        assert system_instruction
+        yield "Test answer"
 
-        async def chunks():
-            yield SimpleNamespace(text="Test answer")
-
-        return chunks()
-
+    complete = AsyncMock(return_value='{"fallacies":[],"claims":[]}')
     client = SimpleNamespace(
-        aio=SimpleNamespace(
-            models=SimpleNamespace(
-                generate_content_stream=stream,
-                generate_content=AsyncMock(
-                    return_value=SimpleNamespace(text='{"fallacies":[],"claims":[]}')
-                ),
-            ),
-            aclose=AsyncMock(),
-        ),
-        close=Mock(),
+        stream=stream,
+        complete=complete,
+        aclose=AsyncMock(),
     )
     monkeypatch.setattr(
         nodes,
         "get_settings",
-        lambda: SimpleNamespace(get_gemini_model=lambda task: (client, "test"), memory_top_k=5),
+        lambda: SimpleNamespace(get_ai_client=lambda task: (client, "test"), memory_top_k=5),
     )
     monkeypatch.setattr(nodes, "embed_single", lambda text: [0.5, 0.8])
     monkeypatch.setattr(
@@ -311,6 +317,67 @@ async def test_real_graph_receives_stream_config(monkeypatch):
     assert result["ai_response"] == "Test answer"
     assert await queue.get() == "Test answer"
     assert result["fallacy_analysis"] == []
+
+
+async def test_fallacy_node_requires_confident_exact_contextual_quote(monkeypatch):
+    response = SimpleNamespace(
+        text=json.dumps(
+            {
+                "fallacies": [
+                    {
+                        "fallacy_type": "Ad Hominem",
+                        "fallacy_name_vi": "Tấn công cá nhân",
+                        "severity": "moderate",
+                        "offending_excerpt": "Bạn sai vì bạn lười",
+                        "explanation": "Tấn công người nói thay vì lập luận.",
+                        "suggestion": "Phản biện vào nội dung.",
+                        "confidence": 0.94,
+                    },
+                    {
+                        "fallacy_type": "Straw Man",
+                        "severity": "minor",
+                        "offending_excerpt": "Tôi không đồng ý",
+                        "explanation": "Không đủ chắc chắn.",
+                        "confidence": 0.65,
+                    },
+                    {
+                        "fallacy_type": "False Dilemma",
+                        "severity": "moderate",
+                        "offending_excerpt": "Không có trong bài",
+                        "explanation": "Trích dẫn không khớp.",
+                        "confidence": 0.99,
+                    },
+                ]
+            }
+        )
+    )
+    generate = AsyncMock(return_value=response.text)
+    client = SimpleNamespace(
+        complete=generate,
+        aclose=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        nodes,
+        "get_settings",
+        lambda: SimpleNamespace(get_ai_client=lambda task: (client, "test")),
+    )
+
+    result = await nodes.fallacy_node(
+        {
+            "config": DebateConfig(topic="Phone use at school", language="vi"),
+            "turns": [
+                Turn(turn_number=0, speaker="user", content="Ý trước đó"),
+                Turn(turn_number=1, speaker="user", content="Bạn sai vì bạn lười"),
+                Turn(turn_number=2, speaker="ai", content="Phản biện"),
+            ],
+            "current_user_message": "Bạn sai vì bạn lười",
+        }
+    )
+
+    assert [item.fallacy_type for item in result["fallacy_analysis"]] == ["Ad Hominem"]
+    prompt = generate.await_args.args[0]
+    assert "Ý trước đó" in prompt
+    assert "Phản biện" not in prompt
 
 
 @pytest.mark.parametrize(
@@ -342,20 +409,15 @@ def test_grade_matches_documented_rubric(total, grade):
 
 
 async def test_memory_embeds_real_claims_and_preserves_turn_numbers(monkeypatch):
-    response = SimpleNamespace(
-        text='{"claims":[{"claim_text":""},{"claim_text":"Energy is useful"}]}'
-    )
+    response = '{"claims":[{"claim_text":""},{"claim_text":"Energy is useful"}]}'
     client = SimpleNamespace(
-        aio=SimpleNamespace(
-            models=SimpleNamespace(generate_content=AsyncMock(return_value=response)),
-            aclose=AsyncMock(),
-        ),
-        close=Mock(),
+        complete=AsyncMock(return_value=response),
+        aclose=AsyncMock(),
     )
     monkeypatch.setattr(
         nodes,
         "get_settings",
-        lambda: SimpleNamespace(get_gemini_model=lambda task: (client, "test")),
+        lambda: SimpleNamespace(get_ai_client=lambda task: (client, "test")),
     )
     embeddings = Mock(return_value=[[0.5, 0.2], [0.3, 0.6]])
     monkeypatch.setattr(nodes, "embed_texts", embeddings)
@@ -389,16 +451,15 @@ async def test_grader_counts_all_fallacies_once(monkeypatch, score_data):
         explanation="x",
         confidence=0.9,
     )
-    response = SimpleNamespace(text=json.dumps(score_data))
-    generate = AsyncMock(return_value=response)
+    generate = AsyncMock(return_value=json.dumps(score_data))
     client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content=generate), aclose=AsyncMock()),
-        close=Mock(),
+        complete=generate,
+        aclose=AsyncMock(),
     )
     monkeypatch.setattr(
         nodes,
         "get_settings",
-        lambda: SimpleNamespace(get_gemini_model=lambda task: (client, "test")),
+        lambda: SimpleNamespace(get_ai_client=lambda task: (client, "test")),
     )
     result = await nodes.grader_node(
         {
@@ -411,4 +472,4 @@ async def test_grader_counts_all_fallacies_once(monkeypatch, score_data):
         }
     )
     assert result["session_score"].fallacies_committed == 2
-    assert "**Total fallacies committed by the user**: 2" in generate.await_args.kwargs["contents"]
+    assert "**Total fallacies committed by the user**: 2" in generate.await_args.args[0]

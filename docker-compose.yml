@@ -83,8 +83,6 @@ services:
       - ./frontend:/app
       - /app/node_modules        # anonymous volume to preserve node_modules
       - /app/.next               # anonymous volume to preserve build cache
-    env_file:
-      - .env
     environment:
       API_INTERNAL_URL: http://backend:8000
       NEXT_PUBLIC_API_URL: ""

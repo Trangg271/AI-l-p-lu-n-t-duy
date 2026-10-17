@@ -1,6 +1,6 @@
 # backend/app/prompts/system_prompts.py
 """
-Core system prompt constants for SocraticAI's Gemini-powered AI nodes.
+Core system prompt constants for SocraticAI's provider-configured AI nodes.
 
 This module is the **single source of truth** for all system prompts used
 across the LangGraph debate pipeline.  Each prompt is a Python string

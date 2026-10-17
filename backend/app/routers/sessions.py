@@ -10,6 +10,7 @@ Routes (all mounted under /session in main.py):
 
 from __future__ import annotations
 
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
@@ -18,6 +19,9 @@ from app.models.session import (
     CreateSessionRequest,
     EndSessionRequest,
     EndSessionResponse,
+    SessionHistoryEntry,
+    SessionHistoryRequest,
+    SessionHistoryResponse,
     SessionMetadata,
 )
 from app.models.ws import WSFrameType
@@ -57,6 +61,37 @@ async def get_session(session_id: UUID) -> SessionMetadata:
             detail=f"Session {session_id} not found",
         )
     return session
+
+
+@router.post(
+    "/history",
+    response_model=SessionHistoryResponse,
+    summary="Load compact practice-history summaries",
+)
+async def get_session_history(request: SessionHistoryRequest) -> SessionHistoryResponse:
+    """Load up to 100 browser-recorded sessions without returning full transcripts."""
+    sessions = await asyncio.gather(
+        *(_session_service.get_session(session_id) for session_id in request.session_ids)
+    )
+    found: list[SessionHistoryEntry] = []
+    missing: list[UUID] = []
+    for session_id, session in zip(request.session_ids, sessions, strict=True):
+        if session is None:
+            missing.append(session_id)
+            continue
+        found.append(
+            SessionHistoryEntry(
+                session_id=session.session_id,
+                topic=session.config.topic,
+                user_position=session.config.user_position,
+                status=session.status,
+                turn_count=session.turn_count,
+                created_at=session.created_at,
+                ended_at=session.ended_at,
+                grade=session.grade,
+            )
+        )
+    return SessionHistoryResponse(sessions=found, missing_session_ids=missing)
 
 
 @router.post(

@@ -28,6 +28,7 @@ interface DebateArenaProps {
   sessionId: string;
   topic?: string;
   userPosition?: string;
+  historyWarning?: boolean;
 }
 
 // ─── Connection Status Badge ─────────────────────────────────────────────────
@@ -124,6 +125,7 @@ export function DebateArena({
   sessionId,
   topic,
   userPosition,
+  historyWarning = false,
 }: DebateArenaProps) {
   const {
     sendMessage,
@@ -277,6 +279,16 @@ export function DebateArena({
           </div>
         </header>
 
+        {historyWarning && (
+          <div
+            role="alert"
+            className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200"
+          >
+            Phiên đã được tạo nhưng không lưu được vào lịch sử trên trình duyệt
+            này. Hãy kiểm tra quyền lưu trữ của trình duyệt.
+          </div>
+        )}
+
         {error && (
           <div
             role="alert"
@@ -356,7 +368,9 @@ export function DebateArena({
                 Chưa phát hiện ngụy biện nào.
               </p>
             )}
-            <h2 className="text-sm font-semibold">Luận điểm ({claims.length})</h2>
+            <h2 className="text-sm font-semibold">
+              Luận điểm ({claims.length})
+            </h2>
             {claims.length ? (
               claims.map((claim, index) => (
                 <ClaimCard key={claim.claim_id} claim={claim} index={index} />
@@ -455,7 +469,8 @@ export function DebateArena({
                       Đưa ra lập luận mở đầu của bạn
                     </p>
                     <p className="text-sm max-w-xs leading-relaxed">
-                      Trình bày rõ lập trường của bạn. AI sẽ phản biện theo phương pháp Socratic.
+                      Trình bày rõ lập trường của bạn. AI sẽ phản biện theo
+                      phương pháp Socratic.
                     </p>
                     <p className="text-xs mt-4 text-muted-foreground/60">
                       Nhấn Ctrl+Enter để gửi
@@ -469,14 +484,16 @@ export function DebateArena({
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, ease: "easeOut" }}
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"
-                      }`}
+                    className={`flex ${
+                      msg.role === "user" ? "justify-end" : "justify-start"
+                    }`}
                   >
                     <div className="max-w-[90%] sm:max-w-[78%] min-w-0 space-y-1.5">
                       {/* Speaker label */}
                       <div
-                        className={`flex items-center gap-2 text-[11px] text-muted-foreground ${msg.role === "user" ? "justify-end" : "justify-start"
-                          }`}
+                        className={`flex items-center gap-2 text-[11px] text-muted-foreground ${
+                          msg.role === "user" ? "justify-end" : "justify-start"
+                        }`}
                       >
                         <span className="font-medium">
                           {msg.role === "user" ? "Bạn" : "SocraticAI"}
@@ -563,12 +580,13 @@ export function DebateArena({
                   />
                   {/* Character counter */}
                   <span
-                    className={`absolute bottom-2 right-3 text-[10px] font-mono ${charCount > charLimit * 0.9
+                    className={`absolute bottom-2 right-3 text-[10px] font-mono ${
+                      charCount > charLimit * 0.9
                         ? "text-danger"
                         : charCount > charLimit * 0.75
                           ? "text-warning"
                           : "text-muted-foreground/40"
-                      }`}
+                    }`}
                   >
                     {charCount}/{charLimit}
                   </span>
@@ -625,12 +643,13 @@ export function DebateArena({
               {fallacies.slice(0, 3).map((f, i) => (
                 <span
                   key={i}
-                  className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full border ${f.severity === "major"
+                  className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full border ${
+                    f.severity === "major"
                       ? "severity-major"
                       : f.severity === "moderate"
                         ? "severity-moderate"
                         : "severity-minor"
-                    }`}
+                  }`}
                 >
                   {f.fallacy_name_vi || f.fallacy_type}
                 </span>

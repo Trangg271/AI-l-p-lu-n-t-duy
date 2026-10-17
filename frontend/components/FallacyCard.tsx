@@ -134,7 +134,7 @@ export function FallacyCard({ fallacy, index = 0 }: FallacyCardProps) {
               {/* Confidence */}
               <div className="flex items-center gap-2 pt-1">
                 <span className="text-xs text-muted-foreground">
-                  Độ tin cậy:
+                  AI tự ước tính:
                 </span>
                 <div className="flex-1 h-1.5 bg-socratic-surface-3 rounded-full overflow-hidden max-w-[100px]">
                   <motion.div
@@ -148,6 +148,10 @@ export function FallacyCard({ fallacy, index = 0 }: FallacyCardProps) {
                   {Math.round(fallacy.confidence * 100)}%
                 </span>
               </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Đây là gợi ý do AI tạo, không phải kết luận chắc chắn. Hãy tự
+                đối chiếu với lập luận và trao đổi với thầy cô nếu chưa đồng ý.
+              </p>
             </div>
           </motion.div>
         )}

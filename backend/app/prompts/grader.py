@@ -2,7 +2,7 @@
 """
 Prompt builders for post-session grading.
 
-Used by: ``graph/nodes.py`` → ``grader_node`` (gemini-2.5-pro)
+Used by: ``graph/nodes.py`` → ``grader_node`` (configured complex model)
 
 Aggregates the full debate transcript and extracted claims to produce
 a ``SessionScore`` with four sub-dimensions (0-25 each), letter grade,
@@ -35,6 +35,13 @@ You are an expert debate coach and formal logic professor. Grade the following d
 3. **Evidence Quality** (0-25): Did they cite evidence, examples, data, or authoritative sources? Were references relevant and accurate?
 4. **Rebuttal Effectiveness** (0-25): How well did they address and counter the AI's arguments? Did they engage with the strongest version of opposing points?
 
+**Fairness and calibration**:
+- Judge only what the user actually said in the transcript; do not invent claims, evidence, contradictions, or examples.
+- Score argument quality, not whether the user's assigned position agrees with you. Do not reward or penalise a position by itself.
+- Do not claim to have verified factual accuracy or sources. If accuracy cannot be established from the transcript, assess relevance and support rather than truth.
+- Treat the fallacy count as an aid, not an automatic point deduction. Do not count an uncertain detection as proven; explain uncertainty in the feedback.
+- Keep the feedback specific to quoted or clearly identifiable turns, constructive, and appropriate to the stated difficulty.
+
 **Letter grade mapping**:
 - A: 85-100 (Excellent)
 - B: 70-84 (Good)
@@ -49,6 +56,7 @@ You are an expert debate coach and formal logic professor. Grade the following d
 - Provide 2-4 areas for improvement (in Vietnamese: góp ý chi tiết, mang tính xây dựng)
 - Write a one-paragraph verdict in English
 - Write a one-paragraph verdict in Vietnamese (nhận xét toàn diện, sâu sắc bằng tiếng Việt)
+- State briefly that this is an AI-generated practice assessment, not an authoritative or teacher-verified grade.
 
 Respond ONLY with valid JSON in this exact format:
 {{

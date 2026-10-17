@@ -5,6 +5,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createSession } from "@/lib/api";
+import { rememberSession } from "@/lib/session-history";
 import { motion, AnimatePresence } from "framer-motion";
 
 type Stance = "pro" | "con";
@@ -12,12 +13,18 @@ type Language = "en" | "vi";
 
 const EXAMPLE_TOPICS: Record<Language, string[]> = {
   en: [
+    "Schools should allow students to use phones during breaks",
+    "Middle-school students should have homework every day",
+    "Social media is helpful for middle-school students",
     "Artificial intelligence will create more jobs than it destroys",
     "Social media does more harm than good to democracy",
     "Universal basic income should be implemented globally",
     "Nuclear energy is essential for a sustainable future",
   ],
   vi: [
+    "Trường học nên cho học sinh dùng điện thoại trong giờ ra chơi",
+    "Học sinh THCS nên được giao bài tập về nhà mỗi ngày",
+    "Mạng xã hội có lợi cho học sinh THCS",
     "Trí tuệ nhân tạo sẽ tạo ra nhiều việc làm hơn nó phá hủy",
     "Mạng xã hội gây hại nhiều hơn lợi cho xã hội",
     "Thu nhập cơ bản phổ quát nên được áp dụng toàn cầu",
@@ -53,7 +60,19 @@ export default function NewDebatePage() {
           language,
           user_position: stance,
         });
-        router.push(`/debate/${session.session_id}`);
+        let historyWarning = false;
+        try {
+          rememberSession(session.session_id);
+        } catch (historyError) {
+          console.error(
+            "Could not save session to browser history",
+            historyError,
+          );
+          historyWarning = true;
+        }
+        router.push(
+          `/debate/${session.session_id}${historyWarning ? "?history=unavailable" : ""}`,
+        );
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Không thể tạo phiên tranh luận",
@@ -99,7 +118,8 @@ export default function NewDebatePage() {
             Thiết lập phiên <span className="gradient-text">tranh luận</span>
           </h1>
           <p className="text-muted-foreground">
-            Chọn chủ đề và xác định lập trường của bạn. AI sẽ tranh luận ở phe đối lập.
+            Chọn chủ đề và xác định lập trường của bạn. AI sẽ tranh luận ở phe
+            đối lập.
           </p>
         </div>
 
@@ -113,7 +133,9 @@ export default function NewDebatePage() {
               <span className="flex h-7 w-7 rounded-full bg-primary/20 text-primary text-sm font-bold items-center justify-center border border-primary/30">
                 1
               </span>
-              <h2 className="font-semibold text-foreground">Chủ đề tranh luận</h2>
+              <h2 className="font-semibold text-foreground">
+                Chủ đề tranh luận
+              </h2>
             </div>
 
             <textarea

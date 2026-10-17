@@ -66,7 +66,7 @@ async def debate_node(state: SessionState, config: RunnableConfig) -> dict[str, 
       1. Embeds the current user message
       2. Queries Qdrant for the top-5 related past claims
       3. Builds contradiction alerts if retrieved claims conflict
-      4. Calls gemini-2.5-flash with the Debate Adversary system prompt
+      4. Streams a provider-configured model with the Debate Adversary system prompt
       5. Returns the full AI response and any contradiction alerts
 
     Args:
@@ -119,10 +119,10 @@ async def debate_node(state: SessionState, config: RunnableConfig) -> dict[str, 
         except Exception as exc:
             log.error("memory_retrieval_failed", error=str(exc))
 
-    # ── Step 3: Build prompts and call Gemini ─────────────────────────────
+    # ── Step 3: Build prompts and stream the provider response ────────────
     settings = get_settings()
 
-    client, model_name = settings.get_gemini_model("fast")
+    client, _ = settings.get_ai_client("fast")
 
     system_prompt = build_debate_system_prompt(
         config=debate_config,
@@ -139,14 +139,8 @@ async def debate_node(state: SessionState, config: RunnableConfig) -> dict[str, 
     full_response = ""
 
     try:
-        response_stream = await client.aio.models.generate_content_stream(
-            model=model_name,
-            contents=user_prompt,
-            config={"system_instruction": system_prompt},
-        )
-        async for chunk in response_stream:
+        async for text_chunk in client.stream(user_prompt, system_instruction=system_prompt):
             log.info("received_chunk")
-            text_chunk = chunk.text or ""
             if text_chunk:
                 full_response += text_chunk
                 if token_queue:
@@ -157,8 +151,7 @@ async def debate_node(state: SessionState, config: RunnableConfig) -> dict[str, 
         log.exception("response_generation_failed")
         raise
     finally:
-        await client.aio.aclose()
-        client.close()
+        await client.aclose()
 
     if not full_response.strip():
         raise RuntimeError("The model returned an empty response")
@@ -191,7 +184,7 @@ async def fallacy_node(state: SessionState) -> dict[str, Any]:
     """Detect logical fallacies in the user's argument.
 
     Runs **concurrently** with ``memory_node`` via LangGraph fan-out.
-    Uses gemini-2.5-pro (complex tier) for careful multi-step reasoning.
+    Uses the configured complex model for careful multi-step reasoning.
     Forces JSON output conforming to the ``FallacyResult`` schema.
 
     Args:
@@ -203,6 +196,7 @@ async def fallacy_node(state: SessionState) -> dict[str, Any]:
     session_id = state.get("session_id", "")
     config = state.get("config")
     current_msg = state.get("current_user_message", "")
+    turns = state.get("turns", [])
 
     log = logger.bind(session_id=session_id, node="fallacy_node")
 
@@ -210,21 +204,21 @@ async def fallacy_node(state: SessionState) -> dict[str, Any]:
         return {"fallacy_analysis": []}
 
     settings = get_settings()
-    client, model_name = settings.get_gemini_model("complex")
+    client, _ = settings.get_ai_client("complex")
 
     try:
         prompt = build_fallacy_detection_prompt(
             argument=current_msg,
             topic=config.topic if config else "",
             language=config.language if config else "en",
+            history=(
+                turns[:-2]
+                if len(turns) >= 2 and turns[-1].speaker == "ai" and turns[-2].speaker == "user"
+                else turns[:-1]
+            ),
         )
 
-        response = await client.aio.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config={"response_mime_type": "application/json"},
-        )
-        raw_text = response.text or "{}"
+        raw_text = (await client.complete(prompt, json_output=True)) or "{}"
 
         # Parse JSON response
         parsed = json.loads(raw_text)
@@ -233,7 +227,19 @@ async def fallacy_node(state: SessionState) -> dict[str, Any]:
         fallacies: list[FallacyResult] = []
         for fd in fallacy_dicts:
             try:
-                fallacies.append(FallacyResult.model_validate(fd))
+                fallacy = FallacyResult.model_validate(fd)
+                if (
+                    fallacy.confidence < 0.8
+                    or not fallacy.offending_excerpt.strip()
+                    or fallacy.offending_excerpt not in current_msg
+                ):
+                    log.info(
+                        "fallacy_finding_filtered",
+                        confidence=fallacy.confidence,
+                        excerpt_matches=fallacy.offending_excerpt in current_msg,
+                    )
+                    continue
+                fallacies.append(fallacy)
             except Exception as parse_err:
                 log.warning("fallacy_parse_error", error=str(parse_err), raw=fd)
 
@@ -247,8 +253,7 @@ async def fallacy_node(state: SessionState) -> dict[str, Any]:
         log.error("fallacy_detection_failed", error=str(exc))
         return {"fallacy_analysis": []}
     finally:
-        await client.aio.aclose()
-        client.close()
+        await client.aclose()
 
 
 # ─── Node: memory_node ───────────────────────────────────────────────────────
@@ -258,7 +263,7 @@ async def memory_node(state: SessionState) -> dict[str, Any]:
     """Extract claims from the AI response and upsert to Qdrant.
 
     Runs **concurrently** with ``fallacy_node`` via LangGraph fan-out.
-    Uses gemini-2.5-flash (fast tier) for lightweight extraction.
+    Uses the configured fast model for lightweight extraction.
 
     Pipeline:
       1. Call LLM with Memory Extractor prompt → JSON list of claims
@@ -285,7 +290,7 @@ async def memory_node(state: SessionState) -> dict[str, Any]:
 
     settings = get_settings()
 
-    client, model_name = settings.get_gemini_model("fast")
+    client, _ = settings.get_ai_client("fast")
 
     new_claims: list[Claim] = []
 
@@ -302,12 +307,7 @@ async def memory_node(state: SessionState) -> dict[str, Any]:
                 language=config.language if config else "en",
             )
 
-            response = await client.aio.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config={"response_mime_type": "application/json"},
-            )
-            raw_text = response.text or "{}"
+            raw_text = (await client.complete(prompt, json_output=True)) or "{}"
 
             try:
                 parsed = json.loads(raw_text)
@@ -366,8 +366,7 @@ async def memory_node(state: SessionState) -> dict[str, Any]:
         log.error("memory_extraction_failed", error=str(exc))
 
     finally:
-        await client.aio.aclose()
-        client.close()
+        await client.aclose()
 
     return {"extracted_claims": existing_claims + new_claims}
 
@@ -380,7 +379,7 @@ async def grader_node(state: SessionState) -> dict[str, Any]:
 
     Only invoked when ``state["is_ended"] == True``.
     Aggregates the full transcript and all extracted claims,
-    then calls gemini-2.5-pro with the Session Grader prompt.
+    then calls the configured complex model with the Session Grader prompt.
 
     Args:
         state: The current LangGraph session state.
@@ -396,7 +395,7 @@ async def grader_node(state: SessionState) -> dict[str, Any]:
     log = logger.bind(session_id=session_id, node="grader_node")
 
     settings = get_settings()
-    client, model_name = settings.get_gemini_model("complex")
+    client, _ = settings.get_ai_client("complex")
 
     # Count total user fallacies across all turns
     total_fallacies = 0
@@ -414,12 +413,7 @@ async def grader_node(state: SessionState) -> dict[str, Any]:
             fallacy_count=total_fallacies,
         )
 
-        response = await client.aio.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config={"response_mime_type": "application/json"},
-        )
-        raw_text = response.text or "{}"
+        raw_text = (await client.complete(prompt, json_output=True)) or "{}"
 
         parsed = json.loads(raw_text)
         score = SessionScore.model_validate(parsed)
@@ -440,5 +434,4 @@ async def grader_node(state: SessionState) -> dict[str, Any]:
         log.error("grading_failed", error=str(exc))
         return {"session_score": None}
     finally:
-        await client.aio.aclose()
-        client.close()
+        await client.aclose()

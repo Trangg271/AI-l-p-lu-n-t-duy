@@ -6,6 +6,7 @@ import { DebateArena } from "@/components/debate/DebateArena";
 
 interface DebatePageProps {
   params: Promise<{ sessionId: string }>;
+  searchParams: Promise<{ history?: string }>;
 }
 
 export async function generateMetadata({
@@ -19,12 +20,18 @@ export async function generateMetadata({
   };
 }
 
-export default async function DebatePage({ params }: DebatePageProps) {
-  const { sessionId } = await params;
+export default async function DebatePage({
+  params,
+  searchParams,
+}: DebatePageProps) {
+  const [{ sessionId }, query] = await Promise.all([params, searchParams]);
 
   return (
     <main className="min-h-screen flex flex-col">
-      <DebateArena sessionId={sessionId} />
+      <DebateArena
+        sessionId={sessionId}
+        historyWarning={query.history === "unavailable"}
+      />
     </main>
   );
 }

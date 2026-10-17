@@ -2,7 +2,7 @@
 """
 Prompt builders for the main debate response generation.
 
-Used by: ``graph/nodes.py`` → ``debate_node`` (gemini-2.5-flash)
+Used by: ``graph/nodes.py`` → ``debate_node`` (configured fast model)
 
 Accepts a ``DebateConfig`` object and injects contradiction alerts
 from the memory retrieval pipeline into the system prompt.
@@ -24,9 +24,11 @@ You are SocraticAI — an expert debate opponent trained in the Socratic method 
 **Your role**:
 1. Challenge the user's arguments with probing Socratic questions.
 2. Before responding, explicitly steelman the user's position — present the strongest version of their argument.
-3. Then construct a clear, logical counter-argument using evidence and first principles.
+3. Argue the assigned opposing position with clear counter-arguments based on sound reasoning and supportable evidence. Never defend a demonstrably false factual claim or invent evidence; correct the premise and explain how that affects the debate.
 4. Keep your response focused (200–350 words).
 5. End with a pointed Socratic question to deepen the discussion.
+
+Use only evidence you can state reliably. Never invent statistics, studies, quotations, or sources; clearly mark uncertainty and frame unsupported points as questions or possibilities. Adapt examples and vocabulary to the user's difficulty.
 
 {difficulty_instructions}
 
@@ -53,9 +55,11 @@ Toàn bộ phản hồi của bạn BẮT BUỘC PHẢI BẰNG TIẾNG VIỆT 10
 **Vai trò và quy trình phản biện của bạn**:
 1. Lắng nghe và tôn trọng: Thách thức lập luận của người dùng bằng các câu hỏi thăm dò sâu sắc theo phương pháp Socratic.
 2. Kỹ thuật Steelmanning: Trước khi phản biện, hãy thừa nhận và trình bày lại phiên bản mạnh nhất, hợp lý nhất trong lập luận của người dùng (1-2 câu).
-3. Xây dựng phản biện: Đưa ra phản luận logic, chặt chẽ dựa trên bằng chứng và nguyên lý cốt lõi.
+3. Bảo vệ lập trường đối lập đã giao bằng phản biện rõ ràng, dựa trên lập luận chặt chẽ và bằng chứng có căn cứ. Không bảo vệ thông tin sai rõ ràng hoặc bịa bằng chứng; hãy đính chính tiền đề và giải thích điều đó ảnh hưởng thế nào đến tranh luận.
 4. Độ dài: Giữ phản hồi súc tích, tập trung (200–350 từ).
 5. Kết thúc: LUÔN LUÔN kết thúc bằng ĐÚNG MỘT câu hỏi Socratic sắc bén buộc người dùng phải suy ngẫm sâu hơn. Không bao giờ tự trả lời câu hỏi của mình.
+
+Chỉ dùng bằng chứng mà bạn có cơ sở đáng tin cậy. Không bịa số liệu, nghiên cứu, trích dẫn hoặc nguồn; hãy nói rõ khi chưa chắc chắn và trình bày nhận định chưa được kiểm chứng như giả thuyết hoặc câu hỏi. Điều chỉnh ví dụ và từ vựng theo trình độ của người dùng.
 
 {difficulty_instructions}
 
@@ -69,8 +73,9 @@ Hãy tranh luận nghiêm túc về mặt trí tuệ nhưng luôn giữ thái đ
 
 _DIFFICULTY_INSTRUCTIONS = {
     "beginner": (
-        "The user is a beginner. Be encouraging, explain your reasoning step by step, "
-        "and use simpler counter-arguments. Focus on teaching good argumentation habits."
+        "The user may be a middle-school student. Be encouraging, explain one idea at a time "
+        "in plain language, use familiar everyday examples, and model good argument habits "
+        "without talking down to them."
     ),
     "advanced": (
         "The user is experienced. Use sophisticated counter-arguments, demand evidence, "
@@ -85,8 +90,9 @@ _DIFFICULTY_INSTRUCTIONS = {
 
 _DIFFICULTY_INSTRUCTIONS_VI = {
     "beginner": (
-        "Người dùng ở trình độ sơ cấp. Hãy động viên, giải thích lý luận từng bước dễ hiểu, "
-        "và sử dụng phản luận cơ bản. Tập trung vào việc rèn luyện thói quen lập luận tốt."
+        "Người dùng có thể là học sinh THCS. Hãy động viên, giải thích từng ý bằng ngôn ngữ "
+        "đơn giản, dùng ví dụ gần gũi trong đời sống và hướng dẫn thói quen lập luận tốt "
+        "mà không tỏ thái độ xem thường."
     ),
     "advanced": (
         "Người dùng có kinh nghiệm. Sử dụng phản luận tinh vi, đòi hỏi bằng chứng xác thực, "

@@ -31,6 +31,20 @@ export interface SessionMetadata {
   ended_at: string | null;
   grade: SessionScore | null;
 }
+export interface SessionHistoryEntry {
+  session_id: string;
+  topic: string;
+  user_position: DebateStance;
+  status: SessionStatus;
+  turn_count: number;
+  created_at: string;
+  ended_at: string | null;
+  grade: SessionScore | null;
+}
+export interface SessionHistoryResponse {
+  sessions: SessionHistoryEntry[];
+  missing_session_ids: string[];
+}
 export interface EndSessionResponse {
   session_id: string;
   status: SessionStatus;
@@ -86,6 +100,11 @@ export const createSession = (body: CreateSessionRequest) =>
   });
 export const getSession = (id: string) =>
   request<SessionMetadata>(`/session/${encodeURIComponent(id)}`);
+export const getSessionHistory = (sessionIds: string[]) =>
+  request<SessionHistoryResponse>("/session/history", {
+    method: "POST",
+    body: JSON.stringify({ session_ids: sessionIds }),
+  });
 export const endSession = (id: string, body: { reason?: string } = {}) =>
   request<EndSessionResponse>(`/session/${encodeURIComponent(id)}/end`, {
     method: "POST",
